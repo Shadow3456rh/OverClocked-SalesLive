@@ -2,21 +2,20 @@ import React, { createContext, useContext, useState, useEffect, ReactNode } from
 import { User } from '@/types';
 import { auth, db } from '@/lib/firebase';
 import { localDB } from '@/lib/db';
-import { saveUserLocally, createUser as createStorageUser } from '@/lib/storage';
+import { saveUserLocally } from '@/lib/storage';
 import { 
-  signInWithEmailAndPassword, 
-  createUserWithEmailAndPassword, 
-  signOut, 
-  onAuthStateChanged 
+  onAuthStateChanged,
+  signInWithPopup,      
+  GoogleAuthProvider,
+  signOut
 } from 'firebase/auth';
-import { doc, getDoc, setDoc } from 'firebase/firestore';
+import { doc, getDoc, setDoc, updateDoc } from 'firebase/firestore';
 
 interface AuthContextType {
   user: User | null;
   isLoggedIn: boolean;
   isLoading: boolean;
-  login: (email: string, password: string) => Promise<boolean>;
-  register: (email: string, password: string, name: string, role: 'owner' | 'staff') => Promise<boolean>;
+  loginWithGoogle: (role: 'owner' | 'staff') => Promise<boolean>;
   logout: () => Promise<void>;
 }
 
@@ -26,19 +25,22 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
   const [user, setUser] = useState<User | null>(null);
   const [isLoading, setIsLoading] = useState(true);
 
+  const googleProvider = new GoogleAuthProvider();
+
+  // --- OFFLINE PERSISTENCE CHECK ---
   useEffect(() => {
     const unsubscribe = onAuthStateChanged(auth, async (firebaseUser) => {
       try {
         if (firebaseUser) {
-          // 1. Check Local DB first (Faster)
+          // 1. Check Local DB first (This works Offline!)
           let appUser = await localDB.users.get(firebaseUser.uid);
 
-          // 2. If not local, fetch from Firestore (Sync)
+          // 2. If online and missing locally, sync from Cloud
           if (!appUser && navigator.onLine) {
             const userDoc = await getDoc(doc(db, 'users', firebaseUser.uid));
             if (userDoc.exists()) {
               appUser = userDoc.data() as User;
-              await saveUserLocally(appUser); 
+              await saveUserLocally(appUser);
             }
           }
 
@@ -49,54 +51,106 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
           setUser(null);
         }
       } catch (err) {
-        console.error("Auth State Error:", err);
+        console.error("Auth Init Error:", err);
       } finally {
         setIsLoading(false);
       }
     });
-
     return () => unsubscribe();
   }, []);
 
-  const login = async (email: string, password: string): Promise<boolean> => {
+  // --- SMART GOOGLE LOGIN ---
+  const loginWithGoogle = async (selectedRole: 'owner' | 'staff'): Promise<boolean> => {
     try {
-      await signInWithEmailAndPassword(auth, email, password);
-      return true;
-    } catch (error) {
-      console.error("Login Failed:", error);
-      return false;
-    }
-  };
+      const result = await signInWithPopup(auth, googleProvider);
+      const fbUser = result.user;
+      const email = fbUser.email?.toLowerCase();
 
-  const register = async (email: string, password: string, name: string, role: 'owner' | 'staff'): Promise<boolean> => {
-    try {
-      // 1. Create Auth User
-      const userCredential = await createUserWithEmailAndPassword(auth, email, password);
-      const firebaseUser = userCredential.user;
+      if (!email) throw new Error("Google account has no email.");
 
-      // 2. Create App User Object
-      // We reuse the storage function but force the ID to match Firebase UID
-      const newUser: User = {
-          userId: firebaseUser.uid,
-          name,
-          email,
-          role,
-          shopId: role === 'owner' ? crypto.randomUUID() : '', // Staff needs to be linked later
+      // 1. Check if User Document Exists
+      const userRef = doc(db, 'users', fbUser.uid);
+      const userSnap = await getDoc(userRef);
+
+      if (userSnap.exists()) {
+        // --- EXISTING USER ---
+        const existingData = userSnap.data() as User;
+        
+        // Strict Role Check
+        if (existingData.role !== selectedRole) {
+           await signOut(auth);
+           throw new Error(`Access Denied: You are registered as ${existingData.role}, not ${selectedRole}.`);
+        }
+        
+        await saveUserLocally(existingData);
+        setUser(existingData);
+        return true;
+      }
+
+      // --- NEW USER (Registration Logic) ---
+      let newUserData: User;
+
+      if (selectedRole === 'owner') {
+        // OWNERS: Auto-generate a new Shop
+        const newShopId = `${fbUser.uid}_shop`; 
+        
+        newUserData = {
+          userId: fbUser.uid,
+          name: fbUser.displayName || 'Owner',
+          email: email,
+          role: 'owner',
+          shopId: newShopId,
           isActive: true,
           createdAt: Date.now()
-      };
+        };
 
-      // 3. Save to Firestore
-      await setDoc(doc(db, 'users', firebaseUser.uid), newUser);
+        // Create Shop Document Immediately
+        await setDoc(doc(db, 'shops', newShopId), {
+          shopId: newShopId,
+          shopName: `${newUserData.name}'s Store`,
+          ownerId: fbUser.uid,
+          createdAt: Date.now(),
+          upiId: '', 
+          upiPayeeName: ''
+        });
+
+      } else {
+        // STAFF: Check for an Invite (The "Handshake")
+        const inviteRef = doc(db, 'invites', email);
+        const inviteSnap = await getDoc(inviteRef);
+
+        if (!inviteSnap.exists()) {
+          await signOut(auth);
+          throw new Error("Access Denied: No shop owner has added this email yet.");
+        }
+
+        const inviteData = inviteSnap.data();
+        
+        // Create Staff User linked to Owner's Shop
+        newUserData = {
+          userId: fbUser.uid,
+          name: fbUser.displayName || inviteData.name,
+          email: email,
+          role: 'staff',
+          shopId: inviteData.shopId, // Link to Owner
+          isActive: true,
+          createdAt: Date.now()
+        };
+
+        // Mark invite as claimed
+        await updateDoc(inviteRef, { status: 'claimed', claimedBy: fbUser.uid });
+      }
+
+      // Save User Profile (Cloud + Local)
+      await setDoc(userRef, newUserData);
+      await saveUserLocally(newUserData);
       
-      // 4. Save Locally
-      await saveUserLocally(newUser);
-
-      setUser(newUser);
+      setUser(newUserData);
       return true;
-    } catch (error) {
-      console.error("Registration Failed:", error);
-      return false;
+
+    } catch (error: any) {
+      console.error("Login Error:", error);
+      throw error; // Let UI handle the error message
     }
   };
 
@@ -106,7 +160,7 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
   };
 
   return (
-    <AuthContext.Provider value={{ user, isLoggedIn: !!user, isLoading, login, register, logout }}>
+    <AuthContext.Provider value={{ user, isLoggedIn: !!user, isLoading, loginWithGoogle, logout }}>
       {children}
     </AuthContext.Provider>
   );
