@@ -3,6 +3,7 @@ import { localDB } from './db';
 import { db as firestore } from './firebase';
 import { collection, doc, setDoc, getDocs, getDoc, query, where, writeBatch, updateDoc, deleteDoc } from 'firebase/firestore';
 
+import { Product } from '@/types';
 // --- UTILS ---
 export const generateId = (): string => crypto.randomUUID();
 
@@ -365,4 +366,56 @@ export const getTopSellingProducts = async (shopId: string, limit: number = 5) =
     .map(([name, data]) => ({ name, ...data }))
     .sort((a, b) => b.revenue - a.revenue)
     .slice(0, limit);
+};
+// --- INVENTORY MANAGEMENT (NEW) ---
+
+export const saveProduct = async (product: Product): Promise<void> => {
+  try {
+    // 1. Save Local
+    await localDB.products.put(product);
+    console.log("Product saved locally");
+
+    // 2. Save Cloud (Sync)
+    if (navigator.onLine) {
+      await setDoc(doc(firestore, 'products', product.id), product);
+      console.log("Product saved to cloud");
+    }
+  } catch (e) {
+    console.error("Error saving product:", e);
+    throw e;
+  }
+};
+
+export const getProducts = async (shopId: string): Promise<Product[]> => {
+  // 1. Try Local
+  let products = await localDB.products.where('shopId').equals(shopId).toArray();
+
+  // 2. If empty & Online, force fetch from Cloud
+  if (products.length === 0 && navigator.onLine) {
+    console.log("Fetching products from cloud...");
+    try {
+      const q = query(collection(firestore, 'products'), where('shopId', '==', shopId));
+      const snapshot = await getDocs(q);
+      
+      const cloudProducts: Product[] = [];
+      snapshot.forEach(doc => cloudProducts.push(doc.data() as Product));
+      
+      if (cloudProducts.length > 0) {
+        await localDB.products.bulkPut(cloudProducts);
+        products = cloudProducts;
+      }
+    } catch (e) {
+      console.error("Error fetching products:", e);
+    }
+  }
+  return products;
+};
+
+export const deleteProduct = async (productId: string): Promise<void> => {
+  await localDB.products.delete(productId);
+  if (navigator.onLine) {
+    try {
+      await deleteDoc(doc(firestore, 'products', productId));
+    } catch (e) { console.error(e); }
+  }
 };

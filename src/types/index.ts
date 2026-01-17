@@ -11,6 +11,13 @@ export interface User {
   isActive: boolean;
   createdAt: number;
 }
+export interface Product {
+  id: string;
+  shopId: string;
+  name: string;
+  price: number;
+  gst: number; // e.g., 18 for 18%
+}
 
 export interface Shop {
   shopId: string;

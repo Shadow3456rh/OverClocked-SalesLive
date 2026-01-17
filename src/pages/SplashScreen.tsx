@@ -4,32 +4,82 @@ import logo from '@/assets/saleslive-logo.png';
 
 export const SplashScreen: React.FC = () => {
   const navigate = useNavigate();
-  const [fadeOut, setFadeOut] = useState(false);
+  
+  // State to control the entrance and exit animations
+  const [mounted, setMounted] = useState(false);
+  const [exiting, setExiting] = useState(false);
 
   useEffect(() => {
-    const timer1 = setTimeout(() => setFadeOut(true), 1500);
-    const timer2 = setTimeout(() => navigate('/login', { replace: true }), 2000);
+    // 1. Trigger entrance animation immediately after mount
+    const startTimer = setTimeout(() => setMounted(true), 100);
+
+    // 2. Trigger exit animation (fade/zoom out) at 3.0 seconds
+    const exitTimer = setTimeout(() => setExiting(true), 3000);
+
+    // 3. Actually navigate away at 3.8 seconds (giving the exit animation time to finish)
+    const navigateTimer = setTimeout(() => {
+      navigate('/login', { replace: true });
+    }, 3800);
     
     return () => {
-      clearTimeout(timer1);
-      clearTimeout(timer2);
+      clearTimeout(startTimer);
+      clearTimeout(exitTimer);
+      clearTimeout(navigateTimer);
     };
   }, [navigate]);
 
   return (
     <div
-      className={`flex min-h-screen flex-col items-center justify-center bg-background transition-opacity duration-500 ${
-        fadeOut ? 'opacity-0' : 'opacity-100'
+      className={`flex min-h-screen flex-col items-center justify-center bg-background transition-all duration-700 ease-in-out ${
+        exiting ? 'opacity-0 scale-110' : 'opacity-100 scale-100'
       }`}
     >
-      <div className="flex flex-col items-center gap-4">
-        <img
-          src={logo}
-          alt="SalesLive"
-          className="h-24 w-24 object-contain animate-pulse-slow"
-        />
-        <h1 className="text-3xl font-bold gradient-brand-text">SalesLive</h1>
-        <p className="text-sm text-muted-foreground">Offline-first billing solution</p>
+      <div className="flex flex-col items-center gap-6">
+        {/* Logo Container with Pop-in animation */}
+        <div 
+          className={`relative transition-all duration-1000 ease-out transform ${
+            mounted ? 'scale-100 opacity-100 translate-y-0' : 'scale-50 opacity-0 translate-y-10'
+          }`}
+        >
+          {/* Optional: A glowing ring effect behind the logo */}
+          <div className="absolute inset-0 rounded-full bg-primary/20 blur-xl animate-pulse" />
+          
+          <img
+            src={logo}
+            alt="SalesLive"
+            className="relative h-28 w-28 object-contain drop-shadow-lg"
+          />
+        </div>
+
+        {/* Text Container with Staggered Delay */}
+        <div className="flex flex-col items-center gap-2">
+          <h1 
+            className={`text-4xl font-bold gradient-brand-text transition-all duration-700 delay-300 ease-out transform ${
+              mounted ? 'translate-y-0 opacity-100' : 'translate-y-4 opacity-0'
+            }`}
+          >
+            SalesLive
+          </h1>
+          
+          <p 
+            className={`text-sm text-muted-foreground transition-all duration-700 delay-500 ease-out transform ${
+              mounted ? 'translate-y-0 opacity-100' : 'translate-y-4 opacity-0'
+            }`}
+          >
+            Offline-first billing solution
+          </p>
+        </div>
+
+        {/* Loading Indicator (Bouncing Dots) - Appears after delay */}
+        <div 
+          className={`flex gap-2 mt-8 transition-opacity duration-1000 delay-700 ${
+            mounted ? 'opacity-100' : 'opacity-0'
+          }`}
+        >
+          <div className="h-2 w-2 rounded-full bg-primary animate-bounce [animation-delay:-0.3s]"></div>
+          <div className="h-2 w-2 rounded-full bg-primary animate-bounce [animation-delay:-0.15s]"></div>
+          <div className="h-2 w-2 rounded-full bg-primary animate-bounce"></div>
+        </div>
       </div>
     </div>
   );

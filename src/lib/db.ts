@@ -1,19 +1,20 @@
 // src/lib/db.ts
 import Dexie, { Table } from 'dexie';
-import { User, Shop, Bill } from '@/types';
+import { User, Shop, Bill, Product } from '@/types'; // Import Product
 
 class SalesLiveDatabase extends Dexie {
   users!: Table<User>;
   shops!: Table<Shop>;
   bills!: Table<Bill>;
+  products!: Table<Product>; // <--- NEW TABLE
 
   constructor() {
     super('SalesLiveDB');
-    this.version(1).stores({
+    this.version(2).stores({
       users: 'userId, email, role, shopId',
       shops: 'shopId, ownerId',
-      // FIX: Added optimized indices for the new Bill queries
-      bills: 'billId, shopId, staffId, createdAt, syncStatus, [shopId+createdAt], [staffId+createdAt]'
+      bills: 'billId, shopId, staffId, createdAt, syncStatus, [shopId+createdAt], [staffId+createdAt]',
+      products: 'id, shopId' // <--- NEW SCHEMA
     });
   }
 }

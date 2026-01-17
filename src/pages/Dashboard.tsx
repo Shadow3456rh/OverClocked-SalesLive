@@ -5,7 +5,6 @@ import { DollarSign, Receipt, Clock, Users, Loader2 } from 'lucide-react';
 import { 
     getTodayBills, 
     getBillsByShop, 
-    getUserLocally, // Using the new async user getter
     getBillsLast7Days, 
     getTopSellingProducts 
 } from '@/lib/storage';
@@ -13,6 +12,7 @@ import { Bill } from '@/types';
 import { RevenueLineChart } from '@/components/charts/RevenueLineChart';
 import { TopProductsChart } from '@/components/charts/TopProductsChart';
 import { UPISettings } from '@/components/UPISettings';
+import { InventoryManager } from '@/components/InventoryManager'; // Imported
 
 interface KPICardProps {
   title: string;
@@ -164,13 +164,11 @@ export const Dashboard: React.FC = () => {
 
   const todaySales = todayBills.reduce((sum, bill) => {
       // Only add to total if PAID. 
-      // Note: We treat undefined as 'UNPAID' for old data safety
       return (bill.paymentStatus === 'PAID') ? sum + bill.totalAmount : sum;
   }, 0);
   const isOwner = user.role === 'owner';
 
   // Calculate staff stats dynamically from bills
-  // (We don't fetch all users locally to save time, we derive from bill history)
   const staffStats = isOwner ? Object.values(allBills.reduce((acc, bill) => {
       if (bill.paymentStatus !== 'PAID') return acc; // Skip unpaid
 
@@ -233,9 +231,13 @@ export const Dashboard: React.FC = () => {
         </div>
       )}
 
-      {/* UPI Settings (Owner only) */}
+      {/* NEW: Inventory & UPI Settings Grid (Owner Only) */}
       {isOwner && (
         <div className="grid gap-6 lg:grid-cols-2">
+          {/* 1. Inventory Manager Card */}
+          <InventoryManager />
+          
+          {/* 2. UPI Settings Card */}
           <UPISettings shopId={user.shopId} />
         </div>
       )}
