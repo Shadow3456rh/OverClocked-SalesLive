@@ -185,17 +185,54 @@ export const updateShop = async (shopId: string, updates: Partial<Shop>): Promis
 
 // --- BILLS (NOW WITH CLOUD SYNC RESTORE) ---
 
-export const createBill = async (billData: Omit<Bill, 'billId' | 'createdAt' | 'syncedAt' | 'syncStatus'>): Promise<Bill> => {
+export const createBill = async (
+  // FIX: Added 'paymentStatus' to the Omit list here 👇
+  billData: Omit<Bill, 'billId' | 'createdAt' | 'syncedAt' | 'syncStatus' | 'paymentStatus'>
+): Promise<Bill> => {
   const newBill: Bill = {
     ...billData,
     billId: generateId(),
     createdAt: Date.now(),
     syncedAt: null,
     syncStatus: 'PENDING',
+    paymentStatus: 'UNPAID', // <--- We set the default here automatically
   };
+  
   await localDB.bills.add(newBill);
   syncPendingData();
   return newBill;
+};
+export const markBillAsPaid = async (billId: string): Promise<void> => {
+  // 1. ALWAYS update Local DB first
+  // CRITICAL: We set 'syncStatus' back to 'PENDING'. 
+  // This tells our sync engine: "Hey, this bill changed! Upload it again next time we have internet."
+  await localDB.bills.update(billId, { 
+      paymentStatus: 'PAID',
+      syncStatus: 'PENDING' 
+  });
+  
+  // 2. Try Cloud Update Immediately (if Online)
+  if (navigator.onLine) {
+    try {
+      await updateDoc(doc(firestore, 'bills', billId), { 
+          paymentStatus: 'PAID',
+          syncStatus: 'SYNCED', 
+          syncedAt: Date.now()
+      });
+      
+      // If cloud success, mark local as SYNCED immediately so we don't re-upload
+      await localDB.bills.update(billId, { 
+          syncStatus: 'SYNCED', 
+          syncedAt: Date.now() 
+      });
+      
+    } catch (e) {
+      console.warn("Cloud update failed, queued for background sync.");
+    }
+  }
+  
+  // 3. Trigger background sync (Just in case we regained connection)
+  syncPendingData();
 };
 
 // HELPER: Sync Down Bills if Local DB is empty
@@ -295,10 +332,17 @@ export const getBillsLast7Days = async (shopId: string) => {
     const dayStr = d.toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric' });
     const dayStart = new Date(d.setHours(0,0,0,0)).getTime();
     const dayEnd = new Date(d.setHours(23,59,59,999)).getTime();
+    
     const dayBills = bills.filter(b => b.createdAt >= dayStart && b.createdAt <= dayEnd);
+    
+    // ONLY SUM REVENUE IF PAID
+    const revenue = dayBills.reduce((sum, b) => {
+        return (b.paymentStatus === 'PAID') ? sum + b.totalAmount : sum;
+    }, 0);
+    
     result.push({
       date: dayStr,
-      revenue: dayBills.reduce((sum, b) => sum + b.totalAmount, 0),
+      revenue,
       count: dayBills.length
     });
   }

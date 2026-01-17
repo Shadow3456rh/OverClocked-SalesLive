@@ -162,12 +162,18 @@ export const Dashboard: React.FC = () => {
       return <div className="flex h-96 items-center justify-center"><Loader2 className="h-8 w-8 animate-spin text-primary"/></div>;
   }
 
-  const todaySales = todayBills.reduce((sum, bill) => sum + bill.totalAmount, 0);
+  const todaySales = todayBills.reduce((sum, bill) => {
+      // Only add to total if PAID. 
+      // Note: We treat undefined as 'UNPAID' for old data safety
+      return (bill.paymentStatus === 'PAID') ? sum + bill.totalAmount : sum;
+  }, 0);
   const isOwner = user.role === 'owner';
 
   // Calculate staff stats dynamically from bills
   // (We don't fetch all users locally to save time, we derive from bill history)
   const staffStats = isOwner ? Object.values(allBills.reduce((acc, bill) => {
+      if (bill.paymentStatus !== 'PAID') return acc; // Skip unpaid
+
       if (!acc[bill.staffId]) {
           acc[bill.staffId] = { name: bill.staffName, id: bill.staffId, count: 0, total: 0 };
       }

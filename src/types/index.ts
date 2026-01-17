@@ -1,6 +1,7 @@
 // User types
-export type UserRole = 'owner' | 'staff';
 
+export type UserRole = 'owner' | 'staff';
+export type PaymentStatus = 'PAID' | 'UNPAID'; // <--- NEW TYPE
 export interface User {
   userId: string;
   name: string;
@@ -44,6 +45,7 @@ export interface Bill {
   createdAt: number;
   syncedAt: number | null;
   syncStatus: SyncStatus;
+  paymentStatus: PaymentStatus; // <--- NEW FIELD
   items: BillItem[];
 }
 

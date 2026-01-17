@@ -6,7 +6,6 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Label } from '@/components/ui/label';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger, DialogFooter } from '@/components/ui/dialog';
 import { Users, Plus, UserCheck, UserX, Loader2, Trash2 } from 'lucide-react';
-// FIX: Import deleteStaff
 import { getUsers, createStaffInvite, updateUser, deleteStaff } from '@/lib/storage';
 import { User } from '@/types';
 import { useToast } from '@/hooks/use-toast';
@@ -29,10 +28,36 @@ export const StaffManagementPage: React.FC = () => {
       setIsLoading(true);
       try {
         const allUsers = await getUsers();
-        const staff = allUsers.filter(
+        
+        // 1. Filter for staff in THIS shop
+        const rawStaffList = allUsers.filter(
           (u) => u.shopId === user.shopId && u.role === 'staff'
         );
-        setStaffMembers(staff);
+
+        // 2. INTELLIGENT DEDUPLICATION (The Fix)
+        // If we have a real user (Google UID) and an invite placeholder (invite_email),
+        // hide the placeholder.
+        const uniqueStaffMap = new Map<string, User>();
+
+        rawStaffList.forEach(u => {
+            const email = u.email.toLowerCase();
+            const existing = uniqueStaffMap.get(email);
+
+            if (!existing) {
+                // First time seeing this email, add it
+                uniqueStaffMap.set(email, u);
+            } else {
+                // Conflict! Prefer the "Real" user (without 'invite_' prefix)
+                if (existing.userId.startsWith('invite_') && !u.userId.startsWith('invite_')) {
+                    uniqueStaffMap.set(email, u); // Replace placeholder with real user
+                }
+                // If existing is real and 'u' is placeholder, do nothing (keep real)
+            }
+        });
+
+        // Convert Map back to Array
+        setStaffMembers(Array.from(uniqueStaffMap.values()));
+
       } catch (error) {
         console.error("Failed to load staff", error);
       } finally {
@@ -80,13 +105,12 @@ export const StaffManagementPage: React.FC = () => {
     setRefresh((r) => r + 1);
   };
 
-  // --- NEW DELETE HANDLER ---
   const handleDeleteStaff = async (staff: User) => {
-    if(!confirm(`Are you sure you want to remove ${staff.name}? This cannot be undone.`)) return;
+    if(!confirm(`Are you sure you want to remove ${staff.name}?`)) return;
 
     try {
         await deleteStaff(staff.userId, staff.email);
-        toast({ title: 'Staff Removed', description: 'User has been deleted from the system.' });
+        toast({ title: 'Staff Removed', description: 'User has been deleted.' });
         setRefresh(r => r + 1);
     } catch(e) {
         toast({ title: 'Error', description: 'Could not delete staff.', variant: 'destructive' });
