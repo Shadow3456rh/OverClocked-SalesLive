@@ -1,0 +1,215 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  :root {
+    /* SalesLive Design System - Light Theme */
+    --background: 210 40% 98%; /* #F8FAFC */
+    --foreground: 222 47% 11%; /* #0F172A */
+
+    --card: 0 0% 100%; /* #FFFFFF */
+    --card-foreground: 222 47% 11%;
+
+    --popover: 0 0% 100%;
+    --popover-foreground: 222 47% 11%;
+
+    /* Primary - Clean Blue */
+    --primary: 217 91% 60%; /* #2563EB */
+    --primary-foreground: 0 0% 100%;
+
+    /* Secondary - Soft Gray */
+    --secondary: 210 40% 96%;
+    --secondary-foreground: 222 47% 11%;
+
+    /* Muted */
+    --muted: 210 40% 96%;
+    --muted-foreground: 215 19% 35%; /* #475569 */
+
+    /* Accent - Gradient colors */
+    --accent: 24 95% 53%; /* Orange */
+    --accent-foreground: 0 0% 100%;
+    --accent-secondary: 340 82% 52%; /* Pink */
+
+    /* Status Colors */
+    --success: 142 71% 45%; /* #16A34A - Online */
+    --success-foreground: 0 0% 100%;
+    
+    --destructive: 0 84% 60%; /* #DC2626 - Offline */
+    --destructive-foreground: 0 0% 100%;
+    
+    --warning: 263 70% 50%; /* #7C3AED - Pending */
+    --warning-foreground: 0 0% 100%;
+
+    /* Borders & Inputs */
+    --border: 214 32% 91%; /* #E2E8F0 */
+    --input: 214 32% 91%;
+    --ring: 217 91% 60%;
+
+    --radius: 0.5rem;
+
+    /* Sidebar */
+    --sidebar-background: 0 0% 100%;
+    --sidebar-foreground: 222 47% 11%;
+    --sidebar-primary: 217 91% 60%;
+    --sidebar-primary-foreground: 0 0% 100%;
+    --sidebar-accent: 210 40% 96%;
+    --sidebar-accent-foreground: 222 47% 11%;
+    --sidebar-border: 214 32% 91%;
+    --sidebar-ring: 217 91% 60%;
+
+    /* Custom gradients */
+    --gradient-brand: linear-gradient(135deg, hsl(24 95% 53%) 0%, hsl(340 82% 52%) 100%);
+    --gradient-brand-subtle: linear-gradient(135deg, hsl(24 95% 53% / 0.1) 0%, hsl(340 82% 52% / 0.1) 100%);
+  }
+
+  .dark {
+    /* Dark Theme */
+    --background: 222 47% 6%; /* Dark slate */
+    --foreground: 210 40% 98%;
+
+    --card: 222 47% 9%;
+    --card-foreground: 210 40% 98%;
+
+    --popover: 222 47% 9%;
+    --popover-foreground: 210 40% 98%;
+
+    /* Primary - Clean Blue */
+    --primary: 217 91% 60%;
+    --primary-foreground: 222 47% 6%;
+
+    /* Secondary */
+    --secondary: 217 33% 17%;
+    --secondary-foreground: 210 40% 98%;
+
+    /* Muted */
+    --muted: 217 33% 17%;
+    --muted-foreground: 215 20% 65%;
+
+    /* Accent */
+    --accent: 24 95% 53%;
+    --accent-foreground: 0 0% 100%;
+    --accent-secondary: 340 82% 52%;
+
+    /* Status Colors */
+    --success: 142 71% 45%;
+    --success-foreground: 0 0% 100%;
+    
+    --destructive: 0 62% 30%;
+    --destructive-foreground: 210 40% 98%;
+    
+    --warning: 263 70% 50%;
+    --warning-foreground: 0 0% 100%;
+
+    /* Borders & Inputs */
+    --border: 217 33% 17%;
+    --input: 217 33% 17%;
+    --ring: 217 91% 60%;
+
+    /* Sidebar */
+    --sidebar-background: 222 47% 9%;
+    --sidebar-foreground: 210 40% 98%;
+    --sidebar-primary: 217 91% 60%;
+    --sidebar-primary-foreground: 0 0% 100%;
+    --sidebar-accent: 217 33% 17%;
+    --sidebar-accent-foreground: 210 40% 98%;
+    --sidebar-border: 217 33% 17%;
+    --sidebar-ring: 217 91% 60%;
+  }
+}
+
+@layer base {
+  * {
+    @apply border-border;
+  }
+
+  body {
+    @apply bg-background text-foreground antialiased;
+    font-family: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif;
+  }
+
+  /* Smooth transitions globally */
+  * {
+    @apply transition-colors duration-150;
+  }
+}
+
+@layer components {
+  .gradient-brand {
+    background: var(--gradient-brand);
+  }
+
+  .gradient-brand-text {
+    background: var(--gradient-brand);
+    -webkit-background-clip: text;
+    -webkit-text-fill-color: transparent;
+    background-clip: text;
+  }
+
+  .status-online {
+    @apply bg-success text-success-foreground;
+  }
+
+  .status-offline {
+    @apply bg-destructive text-destructive-foreground;
+  }
+
+  .status-pending {
+    @apply bg-warning text-warning-foreground;
+  }
+
+  /* Card hover effect */
+  .card-hover {
+    @apply hover:shadow-md hover:border-primary/20 transition-all duration-200;
+  }
+
+  /* Button large for billing */
+  .btn-billing {
+    @apply h-14 text-lg font-semibold rounded-lg shadow-sm;
+  }
+
+  /* KPI card styling */
+  .kpi-card {
+    @apply bg-card border border-border rounded-xl p-6 shadow-sm;
+  }
+
+  /* Table row hover */
+  .table-row-hover {
+    @apply hover:bg-muted/50 transition-colors;
+  }
+
+  /* Input focus styling */
+  .input-focus {
+    @apply focus:ring-2 focus:ring-primary/20 focus:border-primary;
+  }
+}
+
+@layer utilities {
+  .fade-in {
+    animation: fadeIn 0.3s ease-out;
+  }
+
+  @keyframes fadeIn {
+    from {
+      opacity: 0;
+    }
+    to {
+      opacity: 1;
+    }
+  }
+
+  .slide-up {
+    animation: slideUp 0.3s ease-out;
+  }
+
+  @keyframes slideUp {
+    from {
+      opacity: 0;
+      transform: translateY(10px);
+    }
+    to {
+      opacity: 1;
+      transform: translateY(0);
+    }
+  }
+}
