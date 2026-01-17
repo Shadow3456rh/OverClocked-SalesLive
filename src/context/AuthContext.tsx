@@ -2,7 +2,8 @@ import React, { createContext, useContext, useState, useEffect, ReactNode } from
 import { User } from '@/types';
 import { auth, db } from '@/lib/firebase';
 import { localDB } from '@/lib/db';
-import { saveUserLocally } from '@/lib/storage';
+// FIX: Import syncPendingData
+import { saveUserLocally, syncPendingData } from '@/lib/storage';
 import { 
   onAuthStateChanged,
   signInWithPopup,      
@@ -27,15 +28,14 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
 
   const googleProvider = new GoogleAuthProvider();
 
-  // --- OFFLINE PERSISTENCE CHECK ---
+  // --- 1. OFFLINE PERSISTENCE & SYNC LISTENER ---
   useEffect(() => {
+    // A. Auth Listener
     const unsubscribe = onAuthStateChanged(auth, async (firebaseUser) => {
       try {
         if (firebaseUser) {
-          // 1. Check Local DB first (This works Offline!)
           let appUser = await localDB.users.get(firebaseUser.uid);
 
-          // 2. If online and missing locally, sync from Cloud
           if (!appUser && navigator.onLine) {
             const userDoc = await getDoc(doc(db, 'users', firebaseUser.uid));
             if (userDoc.exists()) {
@@ -56,10 +56,28 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
         setIsLoading(false);
       }
     });
-    return () => unsubscribe();
+
+    // B. Network Listener (THE FIX)
+    const handleOnline = () => {
+      console.log("Network restored! Syncing pending bills...");
+      syncPendingData(); // <--- Triggers upload immediately when internet returns
+    };
+
+    // Listen for "online" event
+    window.addEventListener('online', handleOnline);
+    
+    // Check once on mount just in case
+    if (navigator.onLine) {
+        syncPendingData();
+    }
+
+    return () => {
+        unsubscribe();
+        window.removeEventListener('online', handleOnline);
+    };
   }, []);
 
-  // --- SMART GOOGLE LOGIN ---
+  // --- 2. GOOGLE LOGIN ---
   const loginWithGoogle = async (selectedRole: 'owner' | 'staff'): Promise<boolean> => {
     try {
       const result = await signInWithPopup(auth, googleProvider);
@@ -68,32 +86,24 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
 
       if (!email) throw new Error("Google account has no email.");
 
-      // 1. Check if User Document Exists
       const userRef = doc(db, 'users', fbUser.uid);
       const userSnap = await getDoc(userRef);
 
       if (userSnap.exists()) {
-        // --- EXISTING USER ---
         const existingData = userSnap.data() as User;
-        
-        // Strict Role Check
         if (existingData.role !== selectedRole) {
            await signOut(auth);
            throw new Error(`Access Denied: You are registered as ${existingData.role}, not ${selectedRole}.`);
         }
-        
         await saveUserLocally(existingData);
         setUser(existingData);
         return true;
       }
 
-      // --- NEW USER (Registration Logic) ---
       let newUserData: User;
 
       if (selectedRole === 'owner') {
-        // OWNERS: Auto-generate a new Shop
         const newShopId = `${fbUser.uid}_shop`; 
-        
         newUserData = {
           userId: fbUser.uid,
           name: fbUser.displayName || 'Owner',
@@ -103,8 +113,6 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
           isActive: true,
           createdAt: Date.now()
         };
-
-        // Create Shop Document Immediately
         await setDoc(doc(db, 'shops', newShopId), {
           shopId: newShopId,
           shopName: `${newUserData.name}'s Store`,
@@ -115,7 +123,6 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
         });
 
       } else {
-        // STAFF: Check for an Invite (The "Handshake")
         const inviteRef = doc(db, 'invites', email);
         const inviteSnap = await getDoc(inviteRef);
 
@@ -125,32 +132,28 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
         }
 
         const inviteData = inviteSnap.data();
-        
-        // Create Staff User linked to Owner's Shop
+        const finalName = inviteData.name || fbUser.displayName || 'Staff';
+
         newUserData = {
           userId: fbUser.uid,
-          name: fbUser.displayName || inviteData.name,
+          name: finalName,
           email: email,
           role: 'staff',
-          shopId: inviteData.shopId, // Link to Owner
+          shopId: inviteData.shopId,
           isActive: true,
           createdAt: Date.now()
         };
-
-        // Mark invite as claimed
         await updateDoc(inviteRef, { status: 'claimed', claimedBy: fbUser.uid });
       }
 
-      // Save User Profile (Cloud + Local)
       await setDoc(userRef, newUserData);
       await saveUserLocally(newUserData);
-      
       setUser(newUserData);
       return true;
 
     } catch (error: any) {
       console.error("Login Error:", error);
-      throw error; // Let UI handle the error message
+      throw error;
     }
   };
 

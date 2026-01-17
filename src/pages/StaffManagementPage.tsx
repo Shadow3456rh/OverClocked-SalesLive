@@ -5,9 +5,9 @@ import { Input } from '@/components/ui/input';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Label } from '@/components/ui/label';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger, DialogFooter } from '@/components/ui/dialog';
-import { Users, Plus, UserCheck, UserX, Loader2 } from 'lucide-react';
-// FIX: Imported createStaffInvite here
-import { getUsers, createStaffInvite, updateUser } from '@/lib/storage';
+import { Users, Plus, UserCheck, UserX, Loader2, Trash2 } from 'lucide-react';
+// FIX: Import deleteStaff
+import { getUsers, createStaffInvite, updateUser, deleteStaff } from '@/lib/storage';
 import { User } from '@/types';
 import { useToast } from '@/hooks/use-toast';
 
@@ -52,17 +52,16 @@ export const StaffManagementPage: React.FC = () => {
 
     setIsSaving(true);
     try {
-        // --- FIX: Using the correct function to trigger cloud invite ---
         await createStaffInvite(
             newStaffEmail, 
             newStaffName, 
             user.shopId,
-            user.userId // Passing owner ID for tracking
+            user.userId 
         );
 
         toast({
             title: 'Staff Invited',
-            description: `${newStaffName} can now login with Google using ${newStaffEmail}`,
+            description: `${newStaffName} can now login via Google with ${newStaffEmail}`,
         });
 
         setNewStaffName('');
@@ -70,11 +69,7 @@ export const StaffManagementPage: React.FC = () => {
         setIsDialogOpen(false);
         setRefresh((r) => r + 1);
     } catch (error) {
-        toast({ 
-          title: 'Error', 
-          description: 'Failed to create invite. Check internet connection.', 
-          variant: 'destructive' 
-        });
+        toast({ title: 'Error', description: 'Failed to create invite.', variant: 'destructive' });
     } finally {
         setIsSaving(false);
     }
@@ -83,6 +78,19 @@ export const StaffManagementPage: React.FC = () => {
   const toggleStaffStatus = async (staff: User) => {
     await updateUser(staff.userId, { isActive: !staff.isActive });
     setRefresh((r) => r + 1);
+  };
+
+  // --- NEW DELETE HANDLER ---
+  const handleDeleteStaff = async (staff: User) => {
+    if(!confirm(`Are you sure you want to remove ${staff.name}? This cannot be undone.`)) return;
+
+    try {
+        await deleteStaff(staff.userId, staff.email);
+        toast({ title: 'Staff Removed', description: 'User has been deleted from the system.' });
+        setRefresh(r => r + 1);
+    } catch(e) {
+        toast({ title: 'Error', description: 'Could not delete staff.', variant: 'destructive' });
+    }
   };
 
   return (
@@ -164,9 +172,14 @@ export const StaffManagementPage: React.FC = () => {
                     <p className="font-medium truncate">{staff.name}</p>
                     <p className="text-sm text-muted-foreground truncate">{staff.email}</p>
                   </div>
-                  <Button variant="outline" size="sm" onClick={() => toggleStaffStatus(staff)}>
-                    {staff.isActive ? 'Disable' : 'Enable'}
-                  </Button>
+                  <div className="flex gap-2">
+                    <Button variant="outline" size="sm" onClick={() => toggleStaffStatus(staff)}>
+                        {staff.isActive ? 'Disable' : 'Enable'}
+                    </Button>
+                    <Button variant="ghost" size="icon" className="text-destructive hover:bg-destructive/10" onClick={() => handleDeleteStaff(staff)}>
+                        <Trash2 className="h-4 w-4" />
+                    </Button>
+                  </div>
                 </div>
               ))}
             </div>

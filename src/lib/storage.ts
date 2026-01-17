@@ -1,7 +1,7 @@
 import { User, Shop, Bill } from '@/types';
 import { localDB } from './db';
 import { db as firestore } from './firebase';
-import { doc, setDoc, getDoc, updateDoc, writeBatch } from 'firebase/firestore';
+import { collection, doc, setDoc, getDocs, getDoc, query, where, writeBatch, updateDoc, deleteDoc } from 'firebase/firestore';
 
 // --- UTILS ---
 export const generateId = (): string => crypto.randomUUID();
@@ -64,7 +64,7 @@ export const updateUser = async (userId: string, updates: Partial<User>): Promis
   }
 };
 
-// --- STAFF INVITE LOGIC (THIS IS THE CRITICAL FUNCTION) ---
+// --- STAFF INVITE LOGIC ---
 export const createStaffInvite = async (
   email: string, 
   name: string, 
@@ -86,7 +86,6 @@ export const createStaffInvite = async (
   await localDB.users.put(localStaff);
 
   // 2. Create the "Invite Document" in Firestore
-  // This is what the Google Login looks for!
   if (navigator.onLine) {
     try {
       await setDoc(doc(firestore, 'invites', normalizedEmail), {
@@ -105,7 +104,33 @@ export const createStaffInvite = async (
     }
   }
 };
+export const deleteStaff = async (userId: string, email: string): Promise<void> => {
+  // 1. Delete from Local DB
+  // We try to find the user locally first to ensure we delete the right key
+  const localUser = await localDB.users.where('email').equals(email).first();
+  if (localUser) {
+      await localDB.users.delete(localUser.userId);
+  } else {
+      // Fallback: try deleting by the passed ID directly
+      await localDB.users.delete(userId);
+  }
 
+  // 2. Delete from Firestore (User Profile + Invite)
+  if (navigator.onLine) {
+    try {
+      // Delete the User Profile
+      await deleteDoc(doc(firestore, 'users', userId));
+      
+      // Delete the Invite (so they can't re-login)
+      await deleteDoc(doc(firestore, 'invites', email.toLowerCase()));
+      
+      console.log(`Staff ${email} deleted successfully.`);
+    } catch (e) {
+      console.error("Error deleting staff from cloud:", e);
+      throw e;
+    }
+  }
+};
 // --- SHOPS ---
 export const createShop = async (shopName: string, ownerId: string): Promise<Shop> => {
   const newShop: Shop = {
@@ -158,7 +183,8 @@ export const updateShop = async (shopId: string, updates: Partial<Shop>): Promis
     }
 };
 
-// --- BILLS ---
+// --- BILLS (NOW WITH CLOUD SYNC RESTORE) ---
+
 export const createBill = async (billData: Omit<Bill, 'billId' | 'createdAt' | 'syncedAt' | 'syncStatus'>): Promise<Bill> => {
   const newBill: Bill = {
     ...billData,
@@ -172,17 +198,78 @@ export const createBill = async (billData: Omit<Bill, 'billId' | 'createdAt' | '
   return newBill;
 };
 
+// HELPER: Sync Down Bills if Local DB is empty
+const syncBillsFromCloud = async (field: 'shopId' | 'staffId', value: string) => {
+  if (!navigator.onLine) return;
+  
+  try {
+    console.log(`Syncing bills from cloud for ${field}: ${value}...`);
+    const q = query(collection(firestore, 'bills'), where(field, '==', value));
+    const querySnapshot = await getDocs(q);
+    
+    const cloudBills: Bill[] = [];
+    querySnapshot.forEach((doc) => {
+      cloudBills.push(doc.data() as Bill);
+    });
+
+    if (cloudBills.length > 0) {
+      // bulkPut adds new items and updates existing ones without duplication errors
+      await localDB.bills.bulkPut(cloudBills); 
+      console.log(`Restored ${cloudBills.length} bills from cloud.`);
+    }
+  } catch (e) {
+    console.error("Error restoring bills from cloud:", e);
+  }
+};
+
 export const getBillsByShop = async (shopId: string): Promise<Bill[]> => {
-  return await localDB.bills.where('shopId').equals(shopId).reverse().sortBy('createdAt');
+  // 1. Try Local DB first
+  let bills = await localDB.bills
+    .where('shopId').equals(shopId)
+    .reverse()
+    .sortBy('createdAt');
+
+  // 2. If Local DB is empty but we are Online, Fetch from Cloud (Restore History)
+  if (bills.length === 0 && navigator.onLine) {
+    await syncBillsFromCloud('shopId', shopId);
+    
+    // 3. Re-fetch from Local DB after sync to include the new data
+    bills = await localDB.bills
+      .where('shopId').equals(shopId)
+      .reverse()
+      .sortBy('createdAt');
+  }
+  
+  return bills;
 };
 
 export const getBillsByStaff = async (staffId: string): Promise<Bill[]> => {
-    return await localDB.bills.where('staffId').equals(staffId).reverse().sortBy('createdAt');
+  // 1. Try Local DB first
+  let bills = await localDB.bills
+    .where('staffId').equals(staffId)
+    .reverse()
+    .sortBy('createdAt');
+
+  // 2. Sync down if empty
+  if (bills.length === 0 && navigator.onLine) {
+    await syncBillsFromCloud('staffId', staffId);
+    
+    // 3. Re-fetch
+    bills = await localDB.bills
+      .where('staffId').equals(staffId)
+      .reverse()
+      .sortBy('createdAt');
+  }
+
+  return bills;
 };
 
 export const getTodayBills = async (shopId: string): Promise<Bill[]> => {
   const today = new Date();
   today.setHours(0, 0, 0, 0);
+  
+  // Note: Dashboard usually calls 'getBillsByShop' first which triggers the sync,
+  // so this function will have data available.
   return await localDB.bills
     .where('[shopId+createdAt]')
     .between([shopId, today.getTime()], [shopId, Date.now() + 1000])
