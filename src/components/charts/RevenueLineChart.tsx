@@ -10,6 +10,8 @@ import {
 } from 'recharts';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { TrendingUp } from 'lucide-react';
+// IMPORT THE BUTTON
+import { AIAnalysisButton } from '@/components/AiAnalysisButton';
 
 interface RevenueData {
   date: string;
@@ -26,12 +28,16 @@ export const RevenueLineChart: React.FC<RevenueLineChartProps> = ({ data }) => {
 
   return (
     <Card>
-      <CardHeader className="pb-2">
+      {/* MODIFIED HEADER: Added flex to position button */}
+      <CardHeader className="pb-2 flex flex-row items-center justify-between space-y-0">
         <CardTitle className="text-lg flex items-center gap-2">
           <TrendingUp className="h-5 w-5 text-primary" />
           Revenue Trend (Last 7 Days)
         </CardTitle>
+        {/* ADDED BUTTON HERE */}
+        <AIAnalysisButton type="revenue" data={data} />
       </CardHeader>
+      
       <CardContent>
         {!hasData ? (
           <div className="flex flex-col items-center justify-center h-[250px] text-center">

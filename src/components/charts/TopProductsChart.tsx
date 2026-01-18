@@ -10,6 +10,8 @@ import {
 } from 'recharts';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Package } from 'lucide-react';
+// IMPORT THE BUTTON
+import { AIAnalysisButton } from '@/components/AiAnalysisButton';
 
 interface ProductData {
   name: string;
@@ -32,12 +34,16 @@ export const TopProductsChart: React.FC<TopProductsChartProps> = ({ data }) => {
 
   return (
     <Card>
-      <CardHeader className="pb-2">
+      {/* MODIFIED HEADER: Added flex to position button */}
+      <CardHeader className="pb-2 flex flex-row items-center justify-between space-y-0">
         <CardTitle className="text-lg flex items-center gap-2">
           <Package className="h-5 w-5 text-primary" />
           Top Selling Products
         </CardTitle>
+        {/* ADDED BUTTON HERE */}
+        <AIAnalysisButton type="products" data={data} />
       </CardHeader>
+      
       <CardContent>
         {!hasData ? (
           <div className="flex flex-col items-center justify-center h-[250px] text-center">
