@@ -11,7 +11,7 @@ import {
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Package } from 'lucide-react';
 // IMPORT THE BUTTON
-import { AIAnalysisButton } from '@/components/AiAnalysisButton';
+import { AIAnalysisButton } from '@/components/AIAnalysisButton';
 
 interface ProductData {
   name: string;
